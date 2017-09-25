@@ -40,7 +40,7 @@ class ModelDict(CachedDict):
         >>> 'test' #doctest: +SKIP
 
     """
-    def __init__(self, model, key='pk', value=None, instances=False, auto_create=False, *args, **kwargs):
+    def __init__(self, model, key='pk', value=None, instances=False, auto_create=False, cache_version='1', *args, **kwargs):
         assert value is not None
 
         super(ModelDict, self).__init__(*args, **kwargs)
@@ -55,8 +55,8 @@ class ModelDict(CachedDict):
         self.instances = instances
         self.auto_create = auto_create
 
-        self.remote_cache_key = '%s:%s:%s' % (cls_name, model_name, self.key)
-        self.remote_cache_last_updated_key = '%s.last_updated:%s:%s' % (cls_name, model_name, self.key)
+        self.remote_cache_key = '%s:%s:%s:%s' % (cls_name, model_name, cache_version, self.key)
+        self.remote_cache_last_updated_key = '%s.last_updated:%s:%s:%s' % (cls_name, model_name, cache_version, self.key)
 
         request_finished.connect(self._cleanup)
         post_save.connect(self._post_save, sender=model)
