@@ -5,9 +5,14 @@ from django.utils import six
 
 NoValue = object()
 
+DefaultRemoteTimeout = object()
+
 
 class CachedDict(object):
-    def __init__(self, cache=cache, timeout=30):
+    def __init__(self,
+            cache=cache,
+            timeout=30,
+            remote_timeout=DefaultRemoteTimeout):
         cls_name = type(self).__name__
 
         self._local_cache = {}
@@ -19,6 +24,9 @@ class CachedDict(object):
         self.remote_cache = cache
         self.remote_cache_key = cls_name
         self.remote_cache_last_updated_key = '%s.last_updated' % (cls_name,)
+
+        if not remote_timeout == DefaultRemoteTimeout:
+            self.remote_timeout = remote_timeout
 
     def __getitem__(self, key):
         self._populate()
@@ -175,7 +183,11 @@ class CachedDict(object):
             # If local_cache_is_invalid  is None, that means that there was no
             # data present, so we assume we need to add the key to cache.
             if local_cache_is_invalid is None:
-                self.remote_cache.add(self.remote_cache_last_updated_key, now)
+                self.remote_cache.add(
+                    self.remote_cache_last_updated_key,
+                    now,
+                    **self._cache_set_kwargs()
+                )
 
             # Now, if the remote has changed OR it was None in the first place,
             # pull in the values from the remote cache and set it to the
@@ -210,7 +222,7 @@ class CachedDict(object):
         self.remote_cache.set_many({
             self.remote_cache_key: self._local_cache,
             self.remote_cache_last_updated_key: self._last_checked_for_remote_changes,
-        })
+        }, **self._cache_set_kwargs())
 
     def _get_cache_data(self):
         raise NotImplementedError
@@ -219,3 +231,8 @@ class CachedDict(object):
         # We set _last_updated to a false value to ensure we hit the
         # last_updated cache on the next request
         self._last_checked_for_remote_changes = 0.0
+
+    def _cache_set_kwargs(self):
+        if hasattr(self, 'remote_timeout'):
+            return {'timeout': self.remote_timeout}
+        return {}
