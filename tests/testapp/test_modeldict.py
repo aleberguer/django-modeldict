@@ -283,6 +283,22 @@ class CacheIntegrationTest(TestCase):
             self.mydict.remote_cache_last_updated_key: self.mydict._last_checked_for_remote_changes,
         })
 
+    def test_switch_creation_with_custom_remote_timeout(self):
+        cache = mock.Mock()
+        mydict = ModelDict(ModelDictModel,
+                key='key',
+                value='value',
+                auto_create=True,
+                cache=cache,
+                remote_timeout=None)
+        mydict['hello'] = 'foo'
+        assert cache.get.call_count == 0
+        assert cache.set_many.call_count == 1
+        cache.set_many.assert_any_call({
+            mydict.remote_cache_key: {u'hello': u'foo'},
+            mydict.remote_cache_last_updated_key: mydict._last_checked_for_remote_changes,
+        }, timeout=None)
+
     def test_switch_change(self):
         self.mydict['hello'] = 'foo'
         self.cache.reset_mock()
