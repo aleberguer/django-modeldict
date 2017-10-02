@@ -1,3 +1,4 @@
+import random
 import time
 
 from django.core.cache import cache
@@ -12,7 +13,8 @@ class CachedDict(object):
     def __init__(self,
             cache=cache,
             timeout=30,
-            remote_timeout=DefaultRemoteTimeout):
+            remote_timeout=DefaultRemoteTimeout,
+            max_local_timeout_jitter=None):
         cls_name = type(self).__name__
 
         self._local_cache = {}
@@ -20,6 +22,7 @@ class CachedDict(object):
 
         self._last_checked_for_remote_changes = 0.0
         self.timeout = timeout
+        self.max_local_timeout_jitter = max_local_timeout_jitter
 
         self.remote_cache = cache
         self.remote_cache_key = cls_name
@@ -114,7 +117,9 @@ class CachedDict(object):
         """
         Returns ``True`` if the in-memory cache has expired.
         """
-        recheck_at = self._last_checked_for_remote_changes + self.timeout
+        recheck_at = (
+            self._last_checked_for_remote_changes + self._local_timeout
+        )
         return time.time() > recheck_at
 
     def local_cache_is_invalid(self):
@@ -231,6 +236,14 @@ class CachedDict(object):
         # We set _last_updated to a false value to ensure we hit the
         # last_updated cache on the next request
         self._last_checked_for_remote_changes = 0.0
+
+    @property
+    def _local_timeout(self):
+        if self.max_local_timeout_jitter:
+            return (
+                self.timeout + self.max_local_timeout_jitter * random.random()
+            )
+        return self.timeout
 
     @property
     def _cache_set_kwargs(self):
