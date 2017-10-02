@@ -18,6 +18,7 @@ class ModelDictTest(TransactionTestCase):
 
     def setUp(self):
         cache.clear()
+        self.now = time.time()
 
     def assertHasReceiver(self, signal, function):
         for ident, reciever in signal.receivers:
@@ -150,6 +151,54 @@ class ModelDictTest(TransactionTestCase):
         mydict = ModelDict(ModelDictModel, key='key', value='value')
         mydict['hello'] = 'world'
         assert list(mydict.items()) == [('hello', 'world')]
+
+    @mock.patch('modeldict.base.time')
+    def test_modeldict_localcache_has_expired_false_with_no_jitter(self, mock_time):
+        timeout = 30
+        mock_time.time.return_value = self.now + timeout
+        mydict = ModelDict(ModelDictModel, key='key', value='value', timeout=timeout)
+        mydict._last_checked_for_remote_changes = self.now
+        assert mydict.local_cache_has_expired() == False
+
+    @mock.patch('modeldict.base.time')
+    def test_modeldict_localcache_has_expired_true_with_no_jitter(self, mock_time):
+        timeout = 30
+        mock_time.time.return_value = self.now + timeout + 1
+        mydict = ModelDict(ModelDictModel, key='key', value='value', timeout=timeout)
+        mydict._last_checked_for_remote_changes = self.now
+        assert mydict.local_cache_has_expired() == True
+
+    @mock.patch('modeldict.base.time')
+    @mock.patch('modeldict.base.random')
+    def test_modeldict_localcache_has_expired_false_with_jitter(self, mock_random, mock_time):
+        timeout = 30
+        max_local_timeout_jitter = 10
+        mock_time.time.return_value = self.now + timeout + max_local_timeout_jitter
+        mock_random.random.return_value = 1.0
+        mydict = ModelDict(
+            ModelDictModel,
+            key='key',
+            value='value',
+            timeout=timeout,
+            max_local_timeout_jitter=max_local_timeout_jitter)
+        mydict._last_checked_for_remote_changes = self.now
+        assert mydict.local_cache_has_expired() == False
+
+    @mock.patch('modeldict.base.time')
+    @mock.patch('modeldict.base.random')
+    def test_modeldict_localcache_has_expired_true_with_jitter(self, mock_random, mock_time):
+        timeout = 30
+        max_local_timeout_jitter = 10
+        mock_time.time.return_value = self.now + timeout + max_local_timeout_jitter + 1
+        mock_random.random.return_value = 1.0
+        mydict = ModelDict(
+            ModelDictModel,
+            key='key',
+            value='value',
+            timeout=timeout,
+            max_local_timeout_jitter=max_local_timeout_jitter)
+        mydict._last_checked_for_remote_changes = self.now
+        assert mydict.local_cache_has_expired() == True
 
     def test_modeldict_expirey(self):
         base_count = ModelDictModel.objects.count()
