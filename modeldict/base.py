@@ -204,7 +204,11 @@ class CachedDict(object):
                     self._local_cache = remote_value
                     # We've updated from remote, so mark ourselves as
                     # such so that we won't expire until the next timeout
-                    self._local_last_updated = now
+                else:
+                    # Version-suffixed cache was invalidated; refresh it from
+                    # the DB.
+                    self._refresh_versioned_cache()
+                self._local_last_updated = now
 
             # We last checked for remote changes just now
             self._last_checked_for_remote_changes = now
@@ -214,6 +218,13 @@ class CachedDict(object):
             self._update_cache_data()
 
         return self._local_cache
+
+    def _refresh_versioned_cache(self):
+        # Another process from the other Python version invalidated this
+        # version's cache. Write it from the DB, but don't invalidate the other
+        # version's cache or change remote_cache_last_updated
+        self._local_cache = self.get_cache_data()
+        self.remote_cache.set(self.remote_cache_key, self._local_cache)
 
     def _update_cache_data(self):
         self._local_cache = self.get_cache_data()
