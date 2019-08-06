@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import sys
 import time
 from unittest import mock
 
@@ -25,6 +26,11 @@ class ModelDictTest(TransactionTestCase):
             if reciever() is function:
                 return True
         return False
+
+    def test_remote_cache_key_suffixed_by_py_version(self):
+        mydict = ModelDict(ModelDictModel, key='key', value='value', instances=True)
+        expected_version_suffix = 'py%s' % sys.version_info[0]
+        assert mydict.remote_cache_key.endswith(expected_version_suffix)
 
     def test_api(self):
         base_count = ModelDictModel.objects.count()
@@ -323,6 +329,12 @@ class CacheIntegrationTest(TestCase):
         self.cache.get.return_value = {}
         self.mydict = ModelDict(ModelDictModel, key='key', value='value', auto_create=True, cache=self.cache)
 
+    def _get_other_version_key(self, mydict=None):
+        if mydict is None:
+            mydict = self.mydict
+        expected_other_version_no = '2' if sys.version_info[0] == 3 else '3'
+        return mydict.remote_cache_key[:-1] + expected_other_version_no
+
     def test_switch_creation(self):
         self.mydict['hello'] = 'foo'
         assert self.cache.get.call_count == 0
@@ -331,6 +343,36 @@ class CacheIntegrationTest(TestCase):
             self.mydict.remote_cache_key: {u'hello': u'foo'},
             self.mydict.remote_cache_last_updated_key: self.mydict._last_checked_for_remote_changes,
         })
+
+    def test_other_version_cache_deleted_on_switch_creation(self):
+        expected_other_version_cache_key = self._get_other_version_key()
+
+        self.mydict['hello'] = 'foo'
+
+        self.cache.delete.assert_called_once_with(expected_other_version_cache_key)
+
+    def test_other_version_cache_deleted_on_switch_change(self):
+        expected_other_version_cache_key = self._get_other_version_key()
+
+        self.mydict['hello'] = 'foo'
+        self.cache.reset_mock()
+        self.mydict['hello'] = 'bar'
+
+        self.cache.delete.assert_called_once_with(expected_other_version_cache_key)
+
+    @mock.patch('modeldict.base.CachedDict.get_cache_data')
+    def test_cache_is_refreshed_if_key_is_missing(self, mock_get_cache_data):
+        self.mydict['hello'] = 'foo'
+        self.cache.reset_mock()
+
+        self.cache.get.return_value = None
+        self.mydict._last_checked_for_remote_changes = 0.0
+        self.mydict['hello']
+
+        self.cache.set.assert_called_once_with(
+            self.mydict.remote_cache_key,
+            mock_get_cache_data.return_value
+        )
 
     def test_switch_creation_with_custom_remote_timeout(self):
         cache = mock.Mock()
