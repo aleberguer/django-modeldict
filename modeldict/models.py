@@ -1,3 +1,5 @@
+import sys
+
 from django.core.signals import request_finished
 from django.db.models.signals import post_delete, post_save
 
@@ -55,7 +57,9 @@ class ModelDict(CachedDict):
         self.instances = instances
         self.auto_create = auto_create
 
-        self.remote_cache_key = '%s:%s:%s:%s' % (cls_name, model_name, cache_version, self.key)
+        version_suffix = 'py%s' % sys.version_info[0]
+
+        self.remote_cache_key = '%s:%s:%s:%s:%s' % (cls_name, model_name, cache_version, self.key, version_suffix)
         self.remote_cache_last_updated_key = '%s.last_updated:%s:%s:%s' % (cls_name, model_name, cache_version, self.key)
 
         request_finished.connect(self._cleanup)
